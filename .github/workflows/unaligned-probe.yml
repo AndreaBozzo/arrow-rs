@@ -1,0 +1,44 @@
+name: Unaligned probe
+
+# Throwaway: what misaligned reads do on real hardware, for apache/arrow-rs#12010.
+
+on:
+  push:
+    branches: [unaligned-probe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc -vV
+      - name: CPU
+        run: |
+          uname -a
+          if [ "$(uname)" = Linux ]; then
+            lscpu | grep -E 'Architecture|Model name|Vendor|Flags' || true
+            grep -m1 -E 'Features|flags' /proc/cpuinfo || true
+          else
+            sysctl -n machdep.cpu.brand_string
+            sysctl hw.optional | grep -E 'LSE|lse' || true
+          fi
+      - name: Probe
+        run: |
+          echo "### ${{ matrix.os }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "| profile | case | ended | output |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          bash probe/run.sh | tee -a "$GITHUB_STEP_SUMMARY"
